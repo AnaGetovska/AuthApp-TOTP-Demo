@@ -1,0 +1,110 @@
+﻿@page "/totp-setup"
+@inject TOTPService TOTPService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<h3 class="mb-4">Set Up Two-Factor Authentication</h3>
+
+@if (!string.IsNullOrEmpty(qrCodeBase64))
+{
+    <div class="alert alert-info">
+        <p>To enhance your account security, please set up Two-Factor Authentication (2FA) using an authenticator app. Follow these steps:</p>
+        <ol>
+            <li>If you do not have an authenticator app installed on your phone, follow these instructions:</li>
+            <ul>
+                <li>Open the App Store or Google Play Store and search for "Google Authenticator," "Microsoft Authenticator," or "Authy." Install one of these apps.</li>
+                <li>Once installed, open the app.</li>
+            </ul>
+            <li>After installing the authenticator app, scan the QR code below with the app:</li>
+            <ul>
+                <li>Open your authenticator app.</li>
+                <li>Tap the "+" or "Add Account" button (usually found in the app’s main screen).</li>
+                <li>Select "Scan a QR code" (this might differ slightly based on the app).</li>
+                <li>Use your phone's camera to scan the QR code below.</li>
+            </ul>
+
+            <li>Once the QR code is scanned, your authenticator app will start generating 6-digit codes for your account.</li>
+            <li>Enter one of the 6-digit codes from the authenticator app in the box below and click "Confirm TOTP" to verify the setup.</li>
+        </ol>
+        <img style="width: 20em;" src="data:image/png;base64,@qrCodeBase64" />
+        <p>If you are unable to scan the QR code, you can also manually enter the following code into your authenticator app:</p>
+        <div class="alert alert-secondary w-50">
+            <p>Alternatively, use this code:<strong @onclick="CopyTextToClipboard" style="cursor: pointer;">@secret</strong></p>
+        </div>
+        <div class="mt-3">
+            <input @bind="totpCode" class="form-control w-50" placeholder="Enter code from app" />
+        </div>
+        <div class="mt-4">
+            <button @onclick="SetupTotp" class="btn btn-primary">Setup TOTP</button>
+        </div>
+        @if (hasFeedback)
+        {
+            <div class="alert-box @alertType">
+                @alertMessage
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private string secret;
+    private string currentUser = "";
+    private string qrCodeBase64;
+    private string totpCode;
+    private bool isTotpEnabled;
+    private HttpClient _http;
+    private string alertType = "";
+    private string alertMessage = "";
+    private bool hasFeedback;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _http = new HttpClient()
+        {
+            BaseAddress = new Uri(Navigation.BaseUri)
+        };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            currentUser = await GetUserNameAsync();
+            GenerateQRCode();
+        }
+        StateHasChanged();
+    }
+
+    private void GenerateQRCode()
+    {
+        secret = TOTPService.GenerateTOTPSecret();
+        var qrUri = TOTPService.GenerateQRCodeUri(currentUser, secret);
+        var qrCodeBytes = TOTPService.GenerateQRCode(qrUri);
+        qrCodeBase64 = Convert.ToBase64String(qrCodeBytes);
+    }
+
+    private async Task SetupTotp()
+    {
+        var response = await _http.PostAsJsonAsync("api/totp/setup", new { Username = currentUser, Secret = secret, Code = totpCode });
+        if (response.IsSuccessStatusCode)
+        {
+            Navigation.NavigateTo("/");
+        }
+        else
+        {
+            hasFeedback = true;
+            alertType = "alert-warning";
+            alertMessage = "Invalid Authentication ";
+        }
+    }
+
+    private async Task<string> GetUserNameAsync()
+    {
+        return await JSRuntime.InvokeAsync<string>("localStorage.getItem", "username");
+    }
+
+    private async Task CopyTextToClipboard()
+    {
+        await JSRuntime.InvokeVoidAsync("copyClipboard", secret);
+    }
+}

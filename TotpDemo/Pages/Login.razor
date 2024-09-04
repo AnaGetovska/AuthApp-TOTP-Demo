@@ -1,0 +1,105 @@
+﻿@page "/login"
+@using TotpDemo.Models
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<div class="auth-form">
+    <h3 style="margin-top: 2em;">Login</h3>
+
+    <EditForm Model="@user" OnValidSubmit="HandleValidSubmit">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="form-group">
+            <label for="username">Username:</label>
+            <InputText id="username" class="form-control" @bind-Value="user.Username" />
+        </div>
+
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <InputText id="password" type="password" class="form-control" @bind-Value="user.Password" />
+        </div>
+        <button type="submit" class="btn btn-primary mt-2">Login</button>
+    </EditForm>
+    <div style="text-align: center; margin-top: 1em;" class="on-hover" @onclick="NavigateToRegister">Don't have an account? Register here.</div>
+    @if (hasFeedback)
+    {
+        <div class="alert-box @alertType">
+            @alertMessage
+        </div>
+    }
+</div>
+
+@code {
+    private string totpCode = "";
+    private bool isTotpEnabled;
+    private HttpClient _http;
+    private string alertType = "";
+    private string alertMessage = "";
+    private bool hasFeedback;
+    private UserLoginModel user = new UserLoginModel();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _http = new HttpClient()
+        {
+            BaseAddress = new Uri(Navigation.BaseUri)
+        };
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        var response = await _http.PostAsJsonAsync("/api/login", new { user.Username, user.Password });
+        if (response.IsSuccessStatusCode)
+        {
+            await CheckIfTOTPEnabled();
+            await SaveUserNameAsync(user.Username);
+            if (isTotpEnabled)
+            {
+                Navigation.NavigateTo("/confirm-totp");
+            }
+            else
+            {
+                Navigation.NavigateTo("/totp-setup");
+            }
+        }
+        else
+        {
+            hasFeedback = true;
+            alertType = "alert-warning";
+            alertMessage = "Unsuccessful login. Please try again.";
+        }
+    }
+
+    private async Task ConfirmTOTP()
+    {
+        var response = await _http.PostAsJsonAsync("api/totp/confirm", new { Username = user.Username, Code = totpCode });
+        if (response.IsSuccessStatusCode)
+        {
+            Navigation.NavigateTo("/");
+        }
+    }
+
+    private async Task CheckIfTOTPEnabled()
+    {
+        var response = await _http.GetAsync($"api/totp/is-enabled?username={Uri.EscapeDataString(user.Username)}");
+        if (response.IsSuccessStatusCode)
+        {
+            isTotpEnabled = true;
+        }
+        else
+        {
+            isTotpEnabled = false;
+        }
+    }
+
+    private void NavigateToRegister()
+    {
+        Navigation.NavigateTo("/register");
+    }
+
+    private async Task SaveUserNameAsync(string username)
+    {
+        await JSRuntime.InvokeVoidAsync("localStorage.setItem", "username", username);
+    }
+}

@@ -1,0 +1,75 @@
+﻿@page "/confirm-totp"
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<div class="auth-form mt-5 alert alert-info">
+    <h4 class="mb-4 text-center">Two-Factor Authentication is enabled</h4>
+    <p>Your account is now protected with Two-Factor Authentication (2FA).</p>
+    <p>To sign in, you will need to enter a 6-digit code from your authenticator app. Please follow these steps:</p>
+    <ol>
+        <li>Open your authenticator app (e.g., Google Authenticator, Microsoft Authenticator, or Authy).</li>
+        <li>Locate the 6-digit code for your account.</li>
+        <li>Enter the code in the box below and click "Confirm Authentication Code."</li>
+    </ol>
+    <div class="flex-column justify-content-start align-items-start">
+        <div class="mt-3">
+            <input @bind="totpCode" class="form-control" placeholder="Enter the 6-digit code" />
+        </div>
+        <div class="mt-4">
+            <button @onclick="ConfirmTOTP" class="btn btn-primary">Confirm Authentication Code</button>
+        </div>
+    </div>
+</div>
+@if (hasFeedback)
+{
+    <div class="alert-box @alertType">
+        @alertMessage
+    </div>
+}
+
+@code {
+    private string totpCode = "";
+    private string currentUser = "";
+    private bool isTotpEnabled;
+    private HttpClient _http;
+    private string alertType = "";
+    private string alertMessage = "";
+    private bool hasFeedback;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _http = new HttpClient()
+        {
+            BaseAddress = new Uri(Navigation.BaseUri)
+        };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            currentUser = await GetUserNameAsync();
+        }
+        StateHasChanged();
+    }
+
+    private async Task ConfirmTOTP()
+    {
+        var response = await _http.PostAsJsonAsync("api/totp/confirm", new { Username = currentUser, Code = totpCode });
+        if (response.IsSuccessStatusCode)
+        {
+            Navigation.NavigateTo("/");
+        }
+        else
+        {
+            hasFeedback = true;
+            alertType = "alert-warning";
+            alertMessage = "Unsuccessful authentication. Please try again.";
+        }
+    }
+
+    private async Task<string> GetUserNameAsync()
+    {
+        return await JSRuntime.InvokeAsync<string>("localStorage.getItem", "username");
+    }
+}

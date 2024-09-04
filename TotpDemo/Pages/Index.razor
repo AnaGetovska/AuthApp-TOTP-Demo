@@ -1,0 +1,76 @@
+﻿@page "/"
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+
+<PageTitle>Hello @currentUser</PageTitle>
+
+<h1>Hello, world!</h1>
+
+<div>Welcome to your new app.</div>
+
+<button type="button" @onclick="HandleLogout" class="btn btn-primary mt-2">Logout</button>
+
+
+@code {
+    private string currentUser = "";
+    private bool isTotpEnabled;
+    private HttpClient _http;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _http = new HttpClient()
+        {
+            BaseAddress = new Uri(Navigation.BaseUri)
+        };
+    }
+
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            currentUser = await GetUserNameAsync();
+            await CheckIfTOTPEnabled();
+
+            StateHasChanged();
+        }
+        if (currentUser == null || isTotpEnabled == false)
+        {
+            RedirectToLogn();
+        }
+    }
+
+    private void RedirectToLogn()
+    {
+        Navigation.NavigateTo("/login");
+    }
+
+    private async Task<string> GetUserNameAsync()
+    {
+        return await JSRuntime.InvokeAsync<string>("localStorage.getItem", "username");
+    }
+
+    private async Task<string> RemoveUserAsync()
+    {
+        return await JSRuntime.InvokeAsync<string>("localStorage.removeItem", "username");
+    }
+
+    private async Task HandleLogout()
+    {
+        await RemoveUserAsync();
+        RedirectToLogn();
+    }
+
+    private async Task CheckIfTOTPEnabled()
+    {
+        var response = await _http.GetAsync($"api/totp/is-enabled?username={Uri.EscapeDataString(currentUser ?? "")}");
+        if (response.IsSuccessStatusCode)
+        {
+            isTotpEnabled = true;
+        }
+        else
+        {
+            isTotpEnabled = false;
+        }
+    }
+}

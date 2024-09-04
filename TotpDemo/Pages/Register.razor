@@ -1,0 +1,82 @@
+﻿@page "/register"
+@using TotpDemo.Models
+@inject NavigationManager Navigation
+
+<div class="auth-form">
+    <h3 style="margin-top: 2em;">Register</h3>
+
+    <EditForm Model="@user" OnValidSubmit="HandleValidSubmit">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="form-group">
+            <label for="username">Username:</label>
+            <InputText id="username" class="form-control" @bind-Value="user.Username" />
+        </div>
+
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <InputText id="password" type="password" class="form-control" @bind-Value="user.Password" />
+        </div>
+
+        <div class="form-group">
+            <label for="confirmPassword">Confirm Password:</label>
+            <InputText id="confirmPassword" type="password" class="form-control" @bind-Value="user.ConfirmPassword" />
+        </div>
+
+        <button type="submit" class="btn btn-primary mt-2">Register</button>
+    </EditForm>
+    <div style="text-align: center; margin-top: 1em;" class="on-hover" @onclick="NavigateToLogin">Already have an account? Login here.</div>
+    @if (hasFeedback)
+    {
+        <div class="alert-box @alertType">
+            @alertMessage
+        </div>
+    }
+</div>
+
+@code {
+    private UserRegisterModel user = new UserRegisterModel();
+    private HttpClient _http;
+    private string alertType = "";
+    private string alertMessage = "";
+    private bool hasFeedback;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _http = new HttpClient()
+            {
+                BaseAddress = new Uri(Navigation.BaseUri)
+            };
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (user.Password == user.ConfirmPassword)
+        {
+            var response = await _http.PostAsJsonAsync("/api/register", user);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Navigation.NavigateTo("/login");
+            }
+            else
+            {
+                var errorMessage = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Registration failed: {errorMessage}");
+                Navigation.NavigateTo("/login");
+            }
+        }
+        else
+        {
+            hasFeedback = true;
+            alertType = "alert-warning";
+            alertMessage = "Passwords do not match. Try again.";
+        }
+    }
+
+    private void NavigateToLogin()
+    {
+        Navigation.NavigateTo("/login");
+    }
+}
